@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ระบบขอลา</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial; max-width:720px; margin:20px auto; padding:0 12px}
+    label{display:block; margin:10px 0 4px}
+    input,textarea,select{width:100%; padding:10px; font-size:16px; box-sizing:border-box}
+    button{padding:10px 14px; font-size:16px; cursor:pointer; margin-top:12px}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+    #msg{margin-top:14px; padding:10px; border-radius:8px; background:#f6f6f6}
+    #msg.ok{border:1px solid #2e7d32}
+    #msg.bad{border:1px solid #c5221f}
+    .hint{color:#666; font-size:13px; margin-top:8px}
+  </style>
+</head>
+<body>
+
+  <h2>ฟอร์มขอลา (แนบไฟล์ได้)</h2>
+
+  <div class="row">
+    <div>
+      <label for="studentId">รหัสนักศึกษา</label>
+      <input id="studentId" autocomplete="off" />
+    </div>
+    <div>
+      <label for="studentName">ชื่อ-สกุล</label>
+      <input id="studentName" autocomplete="off" />
+    </div>
+  </div>
+
+  <label for="subject">รายวิชา</label>
+  <input id="subject" autocomplete="off" />
+
+  <div class="row">
+    <div>
+      <label for="leaveType">ประเภทการลา</label>
+      <select id="leaveType">
+        <option>ลาป่วย</option>
+        <option>ลากิจ</option>
+        <option>ลาอื่นๆ</option>
+      </select>
+    </div>
+    <div>
+      <label for="file">ไฟล์แนบ (ไม่เกิน 5MB)</label>
+      <input id="file" type="file" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="dateFrom">วันที่เริ่มลา</label>
+      <input id="dateFrom" type="date" />
+    </div>
+    <div>
+      <label for="dateTo">วันที่สิ้นสุด</label>
+      <input id="dateTo" type="date" />
+    </div>
+  </div>
+
+  <label for="reason">เหตุผล</label>
+  <textarea id="reason" rows="4"></textarea>
+
+  <button id="btn" type="button">ส่งคำขอลา</button>
+
+  <div id="msg" class="hint">สถานะจะแสดงตรงนี้</div>
+
+  <div class="hint">
+    ถ้าเปิดจากไฟล์ในเครื่อง (file://) แล้วกดส่งไม่ไป ให้เปิดผ่านเซิร์ฟเวอร์ท้องถิ่น (http://) เพื่อเลี่ยง CORS
+  </div>
+
+<script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbxwk_ze5Ob7b10g_sHXmDy12Ru37RFN_1AXwV04w6eN0ygN6FT9K6EOW82cjUhv8Ngfsg/exec";
+  const MAX_FILE_MB = 5;
+
+  const $ = (id)=>document.getElementById(id);
+
+  function setMsg(text, ok=true){
+    const el = $("msg");
+    if(!el){ alert(text); return; } // กันกรณี element หาย จะได้ไม่เงียบ
+    el.className = ok ? "ok" : "bad";
+    el.innerHTML = text;
+  }
+
+  function disableUI(disabled){
+    const b = $("btn");
+    if(b) b.disabled = disabled;
+  }
+
+  function readFileAsBase64(file){
+    return new Promise((resolve,reject)=>{
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  function clearForm(){
+    $("studentId").value = "";
+    $("studentName").value = "";
+    $("subject").value = "";
+    $("leaveType").value = "ลาป่วย";
+    $("dateFrom").value = "";
+    $("dateTo").value = "";
+    $("reason").value = "";
+    $("file").value = "";
+  }
+
+  async function send(){
+    try{
+      disableUI(true);
+      setMsg("กำลังส่ง...", true);
+
+      const sid = $("studentId").value.trim();
+      const sname = $("studentName").value.trim();
+      const subj = $("subject").value.trim();
+      const lf = $("leaveType").value;
+      const df = $("dateFrom").value;
+      const dt = $("dateTo").value;
+      const rs = $("reason").value.trim();
+
+      if(!sid || !sname || !subj || !df || !dt){
+        setMsg("กรุณากรอก: รหัส, ชื่อ, รายวิชา, วันที่เริ่ม, วันที่สิ้นสุด ให้ครบก่อนครับ", false);
+        disableUI(false); return;
+      }
+      if(dt < df){
+        setMsg("วันที่สิ้นสุด ต้องไม่ก่อน วันที่เริ่ม ครับ", false);
+        disableUI(false); return;
+      }
+
+      const fd = new FormData();
+      fd.append("studentId", sid);
+      fd.append("studentName", sname);
+      fd.append("subject", subj);
+      fd.append("leaveType", lf);
+      fd.append("dateFrom", df);
+      fd.append("dateTo", dt);
+      fd.append("reason", rs);
+
+      const f = $("file").files[0];
+      if(f){
+        const maxBytes = MAX_FILE_MB * 1024 * 1024;
+        if(f.size > maxBytes){
+          setMsg(`ไฟล์ใหญ่เกิน ${MAX_FILE_MB}MB ครับ กรุณาย่อไฟล์ก่อน`, false);
+          disableUI(false); return;
+        }
+        fd.append("fileName", f.name);
+        fd.append("fileMimeType", f.type || "application/octet-stream");
+        fd.append("fileBase64", await readFileAsBase64(f));
+      }
+
+      const res = await fetch(API_URL, { method:"POST", body: fd });
+      const text = await res.text();
+
+      let json = null;
+      try{ json = JSON.parse(text); }catch(e){}
+
+      if(!res.ok){
+        setMsg(`ส่งไม่สำเร็จ (HTTP ${res.status})<br>${text}`, false);
+        disableUI(false); return;
+      }
+      if(!json || json.ok !== true){
+        setMsg("ส่งไม่สำเร็จ: " + (json && json.error ? json.error : text), false);
+        disableUI(false); return;
+      }
+
+      setMsg(json.fileUrl
+        ? `ส่งสำเร็จ ✅<br>ลิงก์ไฟล์แนบ: <a href="${json.fileUrl}" target="_blank">${json.fileUrl}</a>`
+        : "ส่งสำเร็จ ✅ (ไม่มีไฟล์แนบ)", true);
+
+      clearForm();
+      disableUI(false);
+
+    }catch(err){
+      // ถ้าเป็น CORS/Failed to fetch จะมาเข้าตรงนี้
+      setMsg("เกิดข้อผิดพลาด: " + err + "<br><br>ถ้าเปิดผ่าน file:// ให้ลองเปิดผ่าน http:// (Live Server / python http.server) ครับ", false);
+      disableUI(false);
+    }
+  }
+
+  // ผูกปุ่มให้เรียก send() ชัวร์
+  $("btn").addEventListener("click", send);
+</script>
+</body>
+</html>
